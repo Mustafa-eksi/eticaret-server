@@ -1,3 +1,6 @@
 [submodule "user-ms"]
 	path = user-ms
 	url = https://github.com/Mustafa-eksi/user-ms
+[submodule "product-ms"]
+	path = product-ms
+	url = https://github.com/Mustafa-eksi/product-ms
