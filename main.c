@@ -1,27 +1,78 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#define _POSIX_C_SOURCE
+#include <signal.h>
+#define CMD_CAP 256
 
-int run_in_subprocess(char* microservice) {
-    pid_t child_pid = fork(), wpid;
-    int status = 0;
-    if(child_pid == -1) {
-        printf("ERROR: Couldn't create child process.\n");
-        exit(-1); // TODO: maybe it is just better to return -1
-    }
-    if(child_pid == 0) { // Child Process
-        char buff[256] = {0};
-        sprintf(buff, "cd %s; npm start", microservice);
-        if(system(buff)){
-        //if (execl("/usr/bin/npm", "run", "start", (char*) NULL) < 0) {
-            printf("ERROR: Couldn't run npm\n");
-            exit(-1); // TODO: maybe it is just better to return -1
+typedef enum DebugType {
+    INFO,
+    WARNING,
+    ERROR
+} DebugType;
+
+void ms_debug(DebugType type, char* ms_name, char* message) {
+    printf("%s (%s): %s\n", type == INFO ? "[INFO]" : type == WARNING ? "[WARNING]" : "[ERROR]", ms_name, message);
+}
+
+void kill_and_free(pid_t* processes, size_t size) {
+    for(int i = 0; i < size; i++) {
+        if(kill(processes[i], 9) != 0) {
+            ms_debug(ERROR, "kill_and_free", "Couldn't send signal to child process!");
         }
-    } else { // Parent Process
-        while ((wpid = wait(&status)) > 0);
-        return child_pid;
+    }
+    free(processes);
+}
+
+void run_microservices(int argc, char* argv[]) {
+    pid_t* child_pids = (pid_t*) malloc((argc-1)*sizeof(pid_t));
+    int status = 0;
+    for (size_t i = 1; i < argc; i++) { // Doesn't include program itself
+        
+        pid_t child_pid = fork();
+        if(child_pid == -1) {
+            ms_debug(ERROR, argv[i], "Couldn't create child process.");
+            continue;
+        }
+        if(child_pid == 0) { // Child Process
+            char buff[256] = {0};
+            sprintf(buff, "cd %s; npm start", argv[i]);
+            if(system(buff) != 0){
+                ms_debug(ERROR, argv[i], "System returned nonzero value");
+                continue;
+            }
+        } else { // Parent
+            printf("Running microservice: %s, pid: %d\n", argv[i], (int)child_pid);
+            child_pids[i] = child_pid;
+            continue;
+        }
+    }
+    while (1) {
+
+        // REPL stuff
+        //printf("-> ");
+        char TmpBuff[CMD_CAP] = {0};
+        read(0, TmpBuff, CMD_CAP); // Read from stdin
+        if(strcmp(TmpBuff, "quit") == 0) { // if user written "quit"
+            ms_debug(INFO, "server", "Killing all microservices.");
+            kill_and_free(child_pids, argc-1);
+        } else if (strcmp(TmpBuff, "childs") == 0) {
+            for(int i = 1; i < argc; i++) {
+                printf("Microservice name: %s - child id: %d\n", argv[i], child_pids[i-1]);
+            }
+        }
+
+
+        if(wait(&status) > 0) {
+            ms_debug(INFO, "wait", "Waiting is over.");
+            free(child_pids);
+            break;
+        }
+        
+        
     }
 }
 
@@ -30,9 +81,6 @@ int main(int argc, char* argv[]) {
         printf("ERROR: You must spesify at least one microservice to run\n");
         exit(-1);
     }
-    printf("this is first microservice: %s\n", argv[1]);
-    int c_pid = run_in_subprocess(argv[1]);
-    printf("child pid: %d\n", c_pid);
-    
+    run_microservices(argc, argv);
     return 0;
 }
