@@ -41,7 +41,8 @@ void run_microservices(int argc, char* argv[]) {
             char buff[256] = {0};
             sprintf(buff, "cd %s; npm start", argv[i]);
             if(system(buff) != 0){
-                ms_debug(ERROR, argv[i], "System returned nonzero value");
+                //ms_debug(ERROR, argv[i], "System returned nonzero value");
+                kill(getpid(), 9);
                 continue;
             }
         } else { // Parent
@@ -50,11 +51,11 @@ void run_microservices(int argc, char* argv[]) {
             continue;
         }
     }
-    while (1) {
+    while (wait(&status) > 0) {
 
         // REPL stuff
         //printf("-> ");
-        char TmpBuff[CMD_CAP] = {0};
+        /*char TmpBuff[CMD_CAP] = {0};
         read(0, TmpBuff, CMD_CAP); // Read from stdin
         if(strcmp(TmpBuff, "quit") == 0) { // if user written "quit"
             ms_debug(INFO, "server", "Killing all microservices.");
@@ -63,14 +64,14 @@ void run_microservices(int argc, char* argv[]) {
             for(int i = 1; i < argc; i++) {
                 printf("Microservice name: %s - child id: %d\n", argv[i], child_pids[i-1]);
             }
-        }
+        }*/
 
 
-        if(wait(&status) > 0) {
+        //if() {
             ms_debug(INFO, "wait", "Waiting is over.");
             free(child_pids);
-            break;
-        }
+            return;
+        //}
         
         
     }
